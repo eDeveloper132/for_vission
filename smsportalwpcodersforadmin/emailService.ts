@@ -13,7 +13,7 @@ async function sendVerificationEmail(Email: string , verificationToken: string) 
         return;
     }
 
-    const verificationURL = new URL(`${process.env.NGROK}/verify-email`);
+    const verificationURL = new URL(`https://9726-203-101-187-89.ngrok-free.app/verify-email`);
     verificationURL.searchParams.append('token', verificationToken);
 
     const mailOptions = {
