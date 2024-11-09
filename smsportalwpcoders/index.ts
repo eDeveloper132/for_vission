@@ -5,8 +5,11 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { SignModel, TokenModel } from './Schema/Post.js';
+import { ISign, SignModel, TokenModel } from './Schema/Post.js';
+import SessionModel from './Schema/Session.js';
 import MainRoute from './Routes/Main.js';
+import { lstat } from "fs";
+import cookieParser from 'cookie-parser';
 import SMSRoute from './Routes/SMS.js';
 import connection from './DB/db.js';
 import PackageDetails from "./Routes/Package.js";
@@ -16,7 +19,9 @@ const PORT = process.env.PORT || 3437;
 const app = express();
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors());
+app.use(cookieParser());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,80 +31,59 @@ app.listen(PORT, () => {
 });
 
 await connection();
-
-const SessionManager: Array<{ Token: string }> = [];
-const OneTime: string[] = [];
-const ExpiredTokens: Array<{ Token: string }> = [];
-const FetchUserDetails: Array<{ user: any }> = []; // Adjust the type based on your actual user schema
-const verificateUser: any[] = [];
-
+export type AppRes = Response<any, { user: ISign | null }>;
+const sessionMiddleware = async (
+    req: Request,
+    res: AppRes,
+    next: NextFunction
+  ) => {
+    // Define paths that should be excluded from session verification
+    const excludedPaths = [
+      "/signin",
+      "/signup",
+      "/verify-email",
+      "/resend-verification"
+    ];
+  
+    // If the request path is in the excluded paths, skip session check
+    if (excludedPaths.includes(req.path.toLowerCase())) {
+      return next();
+    }
+  
+    try {
+      // Get sessionId from cookies or headers
+      const sessionId = req.cookies.sessionId || req.header("Authorization");
+  
+      if (!sessionId) {
+        return res.status(401).redirect("/signin");
+      }
+  
+      // Find the session in the database
+      const session = await SessionModel.findOne({ sessionId });
+  
+      if (!session) {
+        return res.status(401).redirect("/signin");
+      }
+  
+      // Check if the session is expired
+      if (new Date() > session.expiresAt) {
+        await SessionModel.findByIdAndDelete(session._id); // Delete expired session
+        return res.status(401).redirect("/signin");
+      }
+  
+      // Attach session data to the request object (e.g., userId)
+  
+      res.locals.user = await SignModel.findById(session.userId); // Attach user to request
+  
+      // Proceed to the next middleware or route handler
+      next();
+    } catch (error) {
+      console.error("Session verification error:", error);
+      res.status(500).send("Internal Server Error");
+    }
+  };
+  app.use(sessionMiddleware);
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-function clearOneTimeToken() {
-    const maxTimeout = Math.pow(2, 31) - 1; // Maximum timeout value in JavaScript
-    const timeoutDuration = Math.min(2.592E+09, maxTimeout); // 30 days or max timeout
-
-    setTimeout(async () => {
-        if (OneTime.length > 0) {
-            console.log("OneTime token expired");
-            OneTime.shift();
-            const Token = OneTime[0];
-            if (Token) {
-                const signin = await TokenModel.findOneAndDelete({ Token });
-                console.log('Deleted Token', signin);
-                // Additional logic can be added here, like notifying the user
-            }
-        }
-    }, timeoutDuration);
-}
-
-// Initially set the timeout to clear the token if already present
-if (OneTime.length > 0) {
-    clearOneTimeToken();
-}
-
-app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.toLowerCase() === '/verify-email') {
-        return next();
-    } else if (req.path.toLowerCase() === '/resend-verification') {
-        return next();
-    } else if (req.path.toLowerCase() === '/recoverpass') {
-        return next();
-    }
-    if (OneTime[0]) {
-        const isValidToken = SessionManager.some(session => session.Token === OneTime[0]);
-
-        if (!isValidToken) {
-            console.log("Invalid Token");
-            OneTime.shift();
-            SessionManager.shift();
-            return res.redirect('/signin');
-        }
-
-        if (req.path.toLowerCase() === '/signin' || req.path.toLowerCase() === '/signup') {
-            return res.redirect('/');
-        } else {
-            console.log("Success");
-            next();
-        }
-    } else {
-        console.log('OneTime Token is not set');
-        if (req.path.toLowerCase() === '/signin' || req.path.toLowerCase() === '/signup') {
-            next();
-        } else {
-            return res.redirect('/signin');
-        }
-    }
-
-    // Reset the timeout whenever a new token is set in OneTime array
-    if (OneTime.length > 0) {
-        clearOneTimeToken();
-    }
-});
-
-app.get("/signup", (req: Request, res: Response) => {
-    res.sendFile(path.resolve(__dirname, "./Views/signup.html"));
-});
 
 app.post("/signup", async (req: Request, res: Response) => {
     const { Name, Email, Password, Role, Organization, PhoneNumber } = req.body;
@@ -174,25 +158,16 @@ app.post('/signin', async (req: Request, res: Response) => {
         }
 
         if (user.isVerified) {
-            const token = uuidv4();
-            const hashedToken = await bcrypt.hash(token, 10);
-            await SessionManager.push({
-                Token: hashedToken
+            const sessionId = uuidv4();
+            const session = new SessionModel({
+              userId: user._id,
+              sessionId,
+              createdAt: new Date(),
+              expiresAt: new Date(Date.now() + 3600000), // 1 hour
             });
-            const signin = await TokenModel.create({
-                Token: hashedToken
-            });
-            await signin.save();
-            await OneTime.push(hashedToken);
-            await ExpiredTokens.push({
-                Token: hashedToken
-            });
-            await FetchUserDetails.push({
-                user
-            });
-            console.log('User logged in:', user);
-            console.log('Uploaded Id on Database:', signin);
-            console.log('Generated access token:', hashedToken);
+        
+            await session.save();
+            res.cookie("sessionId", sessionId, { httpOnly: true, secure: true });
             res.redirect('/');
         } else {
             res.redirect('/signup');
@@ -203,28 +178,23 @@ app.post('/signin', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/reset-Session', async (req: Request, res: Response) => {
-    const Token = OneTime[0];
-    if (Token) {
-        const signin = await TokenModel.findOneAndDelete({ Token });
-        console.log('Deleted Token', signin);
-        OneTime.shift();
-        SessionManager.shift();
-        FetchUserDetails.shift();
+app.post("/reset-Session", async (req: Request, res: Response) => {
+    const sessionId = req.cookies.sessionId;
+    if (sessionId) {
+      await SessionModel.findOneAndDelete({ sessionId });
+      res.clearCookie("sessionId");
     }
     res.status(200).send("Session reset");
-});
+  });
 
 app.post('/user', async (req: Request, res: Response) => {
-    const Data = FetchUserDetails[0];
-    console.log(Data);
+    if (!res.locals.user) {
+        return res.status(401).send("Unauthorized");
+      }
+      const usere = res.locals.user as unknown as ISign;
 
     try {
-        if (!Data || !Data.user || !Data.user.Email || !Data.user.Password) {
-            return res.status(400).send('Error: Missing fields');
-        }
-
-        const Id = Data.user._id;
+        const Id = usere._id;
         const user = await SignModel.findById(Id);
         if (!user) {
             console.log('User not found');
@@ -376,8 +346,5 @@ app.use("*", (req: Request, res: Response) => {
     res.status(404).sendFile(path.resolve(__dirname, './Views/page-404.html'));
 });
 
-export {
-    FetchUserDetails,
-    OneTime,
-    SessionManager
-};
+lstat;
+export default app;

@@ -5,7 +5,6 @@ import path from 'path';
 import axios from 'axios';
 import { MessageModel } from '../Schema/Post.js';
 import { v4 as uuidv4 } from 'uuid';
-import { FetchUserDetails } from '../index.js';
 import multer from 'multer';
 import XLSX from 'xlsx';
 import { SignModel } from '../Schema/Post.js';
@@ -23,7 +22,7 @@ router.post('/', async (req, res) => {
         console.log('Server Error 400: Missing required fields');
         return res.status(400).json({ error: 'Please fill in all the required fields: phone code, phone number, and message.' });
     }
-    const user = FetchUserDetails[0]?.user;
+    const user = res.locals.user;
     const packageName = user?.Details?.PackageName;
     const coins = user?.Details?.Coins;
     if (!packageName || !coins) {
@@ -46,7 +45,7 @@ router.post('/', async (req, res) => {
         });
         console.log(response.data);
         if (response.data.STATUS === 'SUCCESSFUL') {
-            const userData = FetchUserDetails[0];
+            const userData = user;
             const userId = userData.user._id;
             const dbUser = await SignModel.findById(userId);
             if (!dbUser) {
@@ -126,91 +125,26 @@ router.get('/addnumbers', (req, res) => {
 });
 router.post('/addnumbers', async (req, res) => {
     const { name, phonecode, phonenumber } = req.body;
-    const user = FetchUserDetails[0]?.user;
+    const user = res.locals.user;
     const userId = user?._id;
     if (!name || !phonecode || !phonenumber) {
         return res.status(400).json({ success: false, message: 'Invalid input' });
     }
     const mix = `${phonecode}${phonenumber}`;
-    try {
-        if (!userId) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        const user = await SignModel.findById(userId);
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        // Ensure multiple_message and its fields are initialized
-        user.multiple_message = user.multiple_message || { Name: [], Phone_Numbers: [] };
-        user.multiple_message.Name = user.multiple_message.Name ?? [];
-        user.multiple_message.Phone_Numbers = user.multiple_message.Phone_Numbers ?? [];
-        // Check if the number already exists
-        if (user.multiple_message.Phone_Numbers.includes(mix)) {
-            return res.status(400).json({ success: false, message: 'Number already exists' });
-        }
-        if (user.multiple_message.Name.includes(name)) {
-            return res.status(400).json({ success: false, message: 'Name already exists' });
-        }
-        // Add the name and number to the arrays
-        user.multiple_message.Name.push(name);
-        user.multiple_message.Phone_Numbers.push(mix);
-        // Save the updated user document
-        await user.save();
-        res.json({ success: true, message: `Number added successfully: ${mix}` });
-    }
-    catch (error) {
-        console.error('Error adding number:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
 });
 router.post('/saveAllNumbers', async (req, res) => {
     const { numbers } = req.body;
     console.log(numbers);
-    const user = FetchUserDetails[0]?.user;
+    const user = res.locals.user;
     const userId = user?._id;
     if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
         return res.status(400).json({ success: false, message: 'No numbers provided' });
-    }
-    try {
-        // Find the user by ID
-        const user = await SignModel.findById(userId);
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        // Initialize multiple_message and its fields if they are undefined
-        user.multiple_message = user.multiple_message || { Name: [], Phone_Numbers: [] };
-        user.multiple_message.Name = user.multiple_message.Name || [];
-        user.multiple_message.Phone_Numbers = user.multiple_message.Phone_Numbers || [];
-        let addedNumbers = [];
-        for (const item of numbers) {
-            const { name, phoneNumber } = item;
-            if (!name || !phoneNumber) {
-                continue; // Skip if either name or phone number is missing
-            }
-            const formattedNumber = `+${phoneNumber}`;
-            console.log(formattedNumber);
-            console.log(user);
-            // Check if the number or name already exists in the user's record
-            if (!user.multiple_message.Phone_Numbers.includes(formattedNumber) &&
-                !user.multiple_message.Name.includes(name)) {
-                user.multiple_message.Phone_Numbers.push(formattedNumber);
-                user.multiple_message.Name.push(name);
-                addedNumbers.push({ name, phoneNumber: formattedNumber });
-            }
-        }
-        // Save the user with the new numbers
-        await user.save();
-        res.json({ success: true, message: `${addedNumbers.length} numbers added successfully`, data: addedNumbers });
-    }
-    catch (error) {
-        console.error('Error saving numbers:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
 });
 router.post('/savenumber', async (req, res) => {
     const { name, phoneNumber } = req.body;
     // console.log(req.body);
-    const user = FetchUserDetails[0]?.user;
+    const user = res.locals.user;
     const userId = user?._id;
     if (!name || !phoneNumber) {
         return res.status(400).json({ success: false, message: 'Invalid input' });
@@ -218,100 +152,13 @@ router.post('/savenumber', async (req, res) => {
     console.log(name, phoneNumber);
     const mix = `+${phoneNumber}`;
     console.log(mix);
-    try {
-        if (!userId) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        const user = await SignModel.findById(userId);
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        // Ensure multiple_message and its fields are initialized
-        user.multiple_message = user.multiple_message || { Name: [], Phone_Numbers: [] };
-        user.multiple_message.Name = user.multiple_message.Name ?? [];
-        user.multiple_message.Phone_Numbers = user.multiple_message.Phone_Numbers ?? [];
-        // Check if the number already exists
-        if (user.multiple_message.Phone_Numbers.includes(mix)) {
-            return res.status(400).json({ success: false, message: 'Number already exists' });
-        }
-        if (user.multiple_message.Name.includes(name)) {
-            return res.status(400).json({ success: false, message: 'Name already exists' });
-        }
-        // Add the name and number to the arrays
-        user.multiple_message.Name.push(name);
-        user.multiple_message.Phone_Numbers.push(mix);
-        // Save the updated user document
-        await user.save();
-        res.json({ success: true, message: `Number added successfully: ${mix}` });
-    }
-    catch (error) {
-        console.error('Error adding number:', error);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
 });
 router.get('/getnumbers', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../Views/numberDetails.html'));
 });
 router.post('/getnumbers', async (req, res) => {
-    try {
-        const userId = FetchUserDetails[0]?.user?._id;
-        // Fetch the sign record for the user by ID
-        const signRecord = await SignModel.findById(userId).select('multiple_message.Phone_Numbers multiple_message.Name');
-        if (!signRecord) {
-            return res.status(404).json({ message: 'Sign record not found' });
-        }
-        const phoneNumbers = signRecord.multiple_message.Phone_Numbers || [];
-        const names = signRecord.multiple_message.Name || [];
-        // Ensure both arrays are of the same length
-        const maxLength = Math.max(phoneNumbers.length, names.length);
-        const extendedPhoneNumbers = phoneNumbers.concat(new Array(maxLength - phoneNumbers.length).fill(''));
-        const extendedNames = names.concat(new Array(maxLength - names.length).fill('Unknown'));
-        res.json({ phoneNumbers: extendedPhoneNumbers, names: extendedNames });
-    }
-    catch (error) {
-        res.status(500).json({ message: 'Server error', error });
-    }
 });
 router.delete('/deletenumber', async (req, res) => {
-    try {
-        const { phoneNumber, Name } = req.body;
-        // Log request body to ensure correct data is being sent
-        console.log('Request Body:', { phoneNumber, Name });
-        // Find the user's sign record
-        const signRecord = await SignModel.findOne({ _id: FetchUserDetails[0].user._id });
-        if (!signRecord) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        // Log sign record to check its structure
-        console.log('Sign Record:', signRecord);
-        // Ensure that multiple_message and Phone_Numbers exist
-        if (!signRecord.multiple_message || !signRecord.multiple_message.Phone_Numbers) {
-            return res.status(404).json({ message: 'Phone numbers list not found.' });
-        }
-        // Find the index of the phone number to be deleted
-        const index = signRecord.multiple_message.Phone_Numbers.indexOf(phoneNumber);
-        // Log the index to check if the number was found
-        console.log('Index of number:', index);
-        // Check if the phone number and name exist at the same index
-        if (index === -1 || signRecord.multiple_message.Name[index] !== Name) {
-            return res.status(404).json({ message: 'Phone number and name pair not found.' });
-        }
-        // Log the phone number and name before deletion
-        console.log('Deleting:', {
-            phoneNumber: signRecord.multiple_message.Phone_Numbers[index],
-            name: signRecord.multiple_message.Name[index],
-        });
-        // Remove the phone number and name at the same index
-        signRecord.multiple_message.Phone_Numbers.splice(index, 1);
-        signRecord.multiple_message.Name.splice(index, 1);
-        // Save the updated sign record
-        await signRecord.save();
-        res.status(200).json({ message: 'Phone number and name deleted successfully.' });
-    }
-    catch (error) {
-        console.error('Error during deletion:', error);
-        res.status(500).json({ message: 'Server error', error });
-    }
 });
 router.get('/bulksms', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../Views/bulksms.html'));
@@ -322,7 +169,7 @@ router.post('/bulksms', async (req, res) => {
         console.log('Server Error 400: Missing required fields');
         return res.status(400).json({ error: 'Please provide a message to send.' });
     }
-    const user = FetchUserDetails[0]?.user;
+    const user = res.locals.user;
     const packageName = user?.Details?.PackageName;
     const coins = user?.Details?.Coins;
     if (!packageName || typeof coins !== 'number') {
@@ -330,15 +177,15 @@ router.post('/bulksms', async (req, res) => {
         return res.status(403).json({ error: 'You cannot send SMS. Please buy our package first.' });
     }
     const phoneNumbers = user?.multiple_message?.Phone_Numbers;
-    if (!Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
-        console.log('Server Error 400: No phone numbers found');
-        return res.status(400).json({ error: 'No phone numbers available to send the message.' });
-    }
+    // if (!Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
+    //     console.log('Server Error 400: No phone numbers found');
+    //     return res.status(400).json({ error: 'No phone numbers available to send the message.' });
+    // }
     if (coins < phoneNumbers.length) {
         return res.status(400).send('Insufficient coins for sending all messages');
     }
     try {
-        const userData = FetchUserDetails[0];
+        const userData = res.locals.user;
         const userId = userData.user._id;
         const dbUser = await SignModel.findById(userId);
         if (!dbUser) {
@@ -392,7 +239,7 @@ router.get('/messages', (req, res) => {
 // API endpoint to fetch messages
 router.get('/api/messages', async (req, res) => {
     try {
-        const useri = FetchUserDetails[0]?.user;
+        const useri = res.locals.user;
         const userId = useri._id;
         if (!userId) {
             return res.status(401).json({ message: 'Unauthorized' });

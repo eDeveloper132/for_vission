@@ -7,7 +7,7 @@ async function sendVerificationEmail(Email, verificationToken) {
         console.error("No recipient email defined");
         return;
     }
-    const verificationURL = new URL(`${process.env.NGROK}/verify-email`);
+    const verificationURL = new URL(`https://c98d-223-123-106-212.ngrok-free.app/verify-email`);
     verificationURL.searchParams.append('token', verificationToken);
     const mailOptions = {
         from: process.env.EMAIL_USER,

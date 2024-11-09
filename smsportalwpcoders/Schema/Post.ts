@@ -50,10 +50,6 @@ interface ISign extends Document {
       Coins?: number | null;
       Status?: string | null;
   };
-  multiple_message: {
-    Phone_Numbers?: string[];
-    Name: string[],
-  };
   messages: Types.ObjectId[]; // References to MessageModel
   package: Types.ObjectId[];  // References to PackageModel (use ObjectId[] for an array of ObjectIds)
 }
@@ -75,10 +71,6 @@ const SignSchema: Schema<ISign> = new Schema({
       PackageExpiry: { type: Date, default: null },
       Coins: { type: Number, default: null },
       Status: { type: String , default: null }
-  },
-  multiple_message: {
-    Phone_Numbers: { type: [String], default: [] },
-    Name: {type: [String], default: []}
   },
   messages: [{ type: Schema.Types.ObjectId, ref: MessageModel }],
   package: [{ type: Schema.Types.ObjectId, ref: PackageModel }]

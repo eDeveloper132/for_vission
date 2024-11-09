@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import axios from 'axios';
 import Stripe from 'stripe';
-import { FetchUserDetails } from '../index.js';
 import { SignModel } from '../Schema/Post.js';
 // Initialize Stripe with the secret key from environment variables
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
@@ -87,7 +86,7 @@ router.post(`/succeed`, async (req, res) => {
         // Find the package by name
         const finded = await findPkgByName(oic[2]);
         console.log(finded);
-        const userData = FetchUserDetails[0]; // Fetch user details from your method
+        const userData = res.locals.user; // Fetch user details from your method
         const userId = userData.user._id;
         // Update user details with package information
         const updatedUser = await SignModel.findByIdAndUpdate(userId, {
@@ -152,7 +151,7 @@ router.post('/buy', async (req, res) => {
         currentPackageDetails.coins,
         currentPackageDetails.description
     ];
-    const userData = FetchUserDetails[0]; // Fetch user details from your method
+    const userData = res.locals.user; // Fetch user details from your method
     const userId = userData.user._id;
     try {
         // Check if the user already has an active package
@@ -195,7 +194,7 @@ router.post('/buy', async (req, res) => {
                 after_completion: {
                     type: 'redirect',
                     redirect: {
-                        url: `https://3ec3-203-101-187-89.ngrok-free.app/buypackage/succeed`,
+                        url: `https://c98d-223-123-106-212.ngrok-free.app/buypackage/succeed`,
                     },
                 },
             });
@@ -218,7 +217,7 @@ router.get('/broughtpackage', (req, res) => {
 // Route to fetch user package
 router.get('/api/package', async (req, res) => {
     try {
-        const useri = FetchUserDetails[0]?.user;
+        const useri = res.locals.user;
         const userId = useri._id;
         if (!userId) {
             return res.status(401).json({ message: 'Unauthorized' });

@@ -32,10 +32,6 @@ const SignSchema = new Schema({
         Coins: { type: Number, default: null },
         Status: { type: String, default: null }
     },
-    multiple_message: {
-        Phone_Numbers: { type: [String], default: [] },
-        Name: { type: [String], default: [] }
-    },
     messages: [{ type: Schema.Types.ObjectId, ref: MessageModel }],
     package: [{ type: Schema.Types.ObjectId, ref: PackageModel }]
 }, { timestamps: true });
